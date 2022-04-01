@@ -1,0 +1,148 @@
+<html>
+
+<head>
+    <meta http-equiv="Cache-control" content="NO-CACHE">
+    <style>
+        html{
+            margin: 10px;
+        }
+        .image-url {
+            width: 800px;
+        }
+        #container
+        {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <form name="photo" id="photo">
+            <input type="file" id="photoInput" name="photoInput">
+            <!--<a href=# id=test><button class='btn btn-default'>Submit</button></a> -->
+        </form>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="output"> </div>
+    <div id="timerOutput"> </div>
+    <div id="container"></div>
+    <div id="sentences-container"></div>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script type=text/javascript>
+    var ratio = 0;
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    var image = new Image();
+
+    $('input#photoInput').bind('change', function() {
+        alert("loading");
+        image.src = window.URL.createObjectURL(document.forms["photo"]["photoInput"].files[0]);
+        console.log(image.src);
+        image.onload = getImageDetections;
+    });
+
+    async function getImageDetections() {
+      canvas.width = image.width;
+      canvas.height = image.height;
+      canvas.style.maxHeight = "500px";
+      canvas.style.maxWidth = "500px";
+      ctx.drawImage(image, 0, 0);
+      var data = canvas.toDataURL().split(';base64,')[1];
+      console.log(data);
+      const baseUrlPost = "http://127.0.0.1:5000/background_process_test";
+
+      const inputJson = {
+        input: data
+      };
+
+      console.log("parseimagebackend", inputJson);
+
+      const response = await fetch(baseUrlPost, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(inputJson),
+      }).then(function(response) {
+        response.json().then(function(data) {
+          console.log(data);
+          document.getElementById("output").innerHTML = data[0][0] + " " + data[0][1] + "%";
+          document.getElementById("timerOutput").innerHTML = data[1] + " seconds";
+        });
+      });
+    }
+    function setDimensions() {
+        image.height = image.height > 1000 ? 1000 : image.height;
+        image.width = image.width > 1000 ? 1000 : image.width;
+        canvas.width = image.width;
+        canvas.height = image.height;
+        ctx.drawImage(image, 0, 0, image.width, image.height);
+
+        var base64 = canvas.toDataURL().split(';base64,')[1];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        $.ajax({
+            type: "POST",
+            datatype: "json",
+            url: "/background_process_test",
+            data: {base64: base64},
+            success: function() {
+                $.getJSON("static/data.json", function(data) {
+                    var parent = document.getElementById("itemList");
+                    ctx = canvas.getContext("2d");
+                    while (parent.firstChild) {
+                        parent.firstChild.remove()
+                    }
+                    for (let counter = 0; counter < data.length; counter++) {
+                        console.log(data[counter]);
+                        ctx.beginPath();
+                        ctx.strokeStyle = "#FF0000";
+                        ctx.rect(data[counter]["box_points"][0], data[counter]["box_points"][1], (data[counter]["box_points"][2] - data[counter]["box_points"][0]), (data[counter]["box_points"][3] - data[counter]["box_points"][1]));
+                        ctx.stroke();
+
+                        let item = document.createElement("LI");
+                        item.innerHTML = data[counter]["name"] + " " + data[counter]["percentage_probability"];
+                        item.dataset.detectionItem = data[counter];
+                        item.addEventListener("mouseenter", function() {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.beginPath();
+                            ctx.strokeStyle = "#0000FF";
+                            ctx.rect(data[counter]["box_points"][0], data[counter]["box_points"][1], (data[counter]["box_points"][2] - data[counter]["box_points"][0]), (data[counter]["box_points"][3] - data[counter]["box_points"][1]));
+                            ctx.stroke();
+                            for (let i = 0; i < data.length; i++) {
+                                if (i == counter) {
+                                    continue;
+                                }
+                                ctx.beginPath();
+                                ctx.strokeStyle = "#FF0000";
+                                ctx.rect(data[i]["box_points"][0], data[i]["box_points"][1], (data[i]["box_points"][2] - data[i]["box_points"][0]), (data[i]["box_points"][3] - data[i]["box_points"][1]));
+                                ctx.stroke();
+                            }
+                        });
+                        item.addEventListener("mouseleave", function() {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            for (let i = 0; i < data.length; i++) {
+                                ctx.beginPath();
+                                ctx.strokeStyle = "#FF0000";
+                                ctx.rect(data[i]["box_points"][0], data[i]["box_points"][1], (data[i]["box_points"][2] - data[i]["box_points"][0]), (data[i]["box_points"][3] - data[i]["box_points"][1]));
+                                ctx.stroke();
+                            }
+                        });
+                        parent.appendChild(item);
+                    }
+                    console.log(data);
+                });
+            }
+        });
+    }
+
+
+    </script>
+
+</body>
+
+</html>
